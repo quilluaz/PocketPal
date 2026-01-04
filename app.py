@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 from src.auth import init_session_state, is_authenticated, render_auth_page, logout, get_current_user_id
-from src.db_connector import get_transactions, insert_transactions, delete_transaction, get_holdings, insert_holding, delete_holding, check_duplicate_transaction
+from src.db_connector import get_transactions, insert_transactions, delete_transaction, get_holdings, insert_holding, delete_holding, get_existing_signatures
 from src.etl_pipeline import process_csv
 from src.market_data import calculate_holdings_value, get_total_portfolio_value, validate_ticker
 from src.visuals import create_sankey_diagram, create_spending_by_category_chart, create_spending_trend_chart, create_holdings_chart, calculate_kpis
@@ -229,12 +229,15 @@ def render_upload_page():
         
         if st.button("Process & Import", type="primary", use_container_width=True):
             with st.status("Importing data...", expanded=True) as status:
+                st.write("Fetching existing records...")
+                existing_sigs = get_existing_signatures(user_id)
+                
                 st.write("Parsing CSV...")
                 result_df, stats = process_csv(
                     uploaded_file,
                     user_id,
                     account_source or "Unknown",
-                    check_duplicate=check_duplicate_transaction
+                    existing_signatures=existing_sigs
                 )
                 
                 if result_df is not None:

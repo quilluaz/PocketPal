@@ -76,6 +76,23 @@ def get_transactions(user_id: str, limit: int = 1000) -> list:
     return SupabaseTable("transactions").select(user_id, order_by=("date", True), limit=limit)
 
 
+def get_existing_signatures(user_id: str) -> set:
+    """
+    Fetch a set of (date, amount, description) tuples for existing transactions.
+    Used for batch deduplication - O(1) lookup instead of N database queries.
+    """
+    client = get_authenticated_client()
+    response = client.table("transactions") \
+        .select("date, amount, description") \
+        .eq("user_id", user_id) \
+        .execute()
+    
+    return {
+        (row['date'], float(row['amount']), row['description']) 
+        for row in response.data
+    }
+
+
 def insert_transactions(transactions: list) -> dict:
     """Insert multiple transactions."""
     return SupabaseTable("transactions").insert(transactions)

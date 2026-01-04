@@ -5,7 +5,6 @@ Handles detection, parsing, cleaning, and categorization.
 import pandas as pd
 import re
 from datetime import datetime
-from typing import Callable
 
 
 # ============================================================
@@ -161,10 +160,13 @@ def process_csv(
     file,
     user_id: str,
     account_source: str = "Unknown",
-    check_duplicate: Callable = None
+    existing_signatures: set = None
 ) -> tuple[pd.DataFrame | None, dict]:
     """
     Process a bank CSV file using vectorized operations.
+    
+    Args:
+        existing_signatures: Optional set of (date, amount, description) tuples for O(1) dedup
     """
     # Read CSV
     try:
@@ -201,15 +203,12 @@ def process_csv(
     }
     
     # 1. Vectorized Date Parsing
-    # pd.to_datetime is much faster than iterating
-    # errors='coerce' turns invalid dates into NaT
     df['parsed_date'] = pd.to_datetime(df[mapping['date']], errors='coerce')
     
     # 2. Vectorized Amount Cleaning
     df['parsed_amount'] = clean_amount_vectorized(df[mapping['amount']])
     
     # 3. Filter invalid rows
-    # Drop where date is NaT or amount is 0
     valid_mask = (df['parsed_date'].notna()) & (df['parsed_amount'] != 0)
     invalid_count = (~valid_mask).sum()
     stats["skipped_invalid"] = int(invalid_count)
@@ -222,12 +221,7 @@ def process_csv(
     # 4. Prepare Description
     df_clean['clean_description'] = df_clean[mapping['description']].fillna("").astype(str).str.strip()
     
-    # 5. Check Duplicates (if checking function provided)
-    # This part is harder to vectorize fully if dependent on DB checks, 
-    # but we can filter against a set if we fetch existing hashes, 
-    # or iterate just the clean rows.
-    # For now, we iterate the clean dataframe which is still an improvement.
-    
+    # 5. Build final rows with O(1) deduplication
     final_rows = []
     
     for _, row in df_clean.iterrows():
@@ -235,8 +229,8 @@ def process_csv(
         amount = float(row['parsed_amount'])
         desc = row['clean_description']
         
-        # Check duplicate
-        if check_duplicate and check_duplicate(user_id, date_str, amount, desc):
+        # O(1) duplicate check against pre-fetched signatures
+        if existing_signatures and (date_str, amount, desc) in existing_signatures:
             stats["skipped_duplicate"] += 1
             continue
             
