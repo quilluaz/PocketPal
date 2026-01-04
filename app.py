@@ -228,37 +228,39 @@ def render_upload_page():
         uploaded_file.seek(0)
         
         if st.button("Process & Import", type="primary", use_container_width=True):
-            with st.spinner("Processing CSV..."):
+            with st.status("Importing data...", expanded=True) as status:
+                st.write("Parsing CSV...")
                 result_df, stats = process_csv(
                     uploaded_file,
                     user_id,
                     account_source or "Unknown",
                     check_duplicate=check_duplicate_transaction
                 )
+                
+                if result_df is not None:
+                    st.write(f"Processed {stats['processed']} transactions.")
+                    st.write("Saving to database...")
+                    records = result_df.to_dict('records')
+                    insert_transactions(records)
+                    display_success = True
+                    status.update(label="Import Complete!", state="complete", expanded=False)
+                else:
+                    display_success = False
+                    status.update(label="Import Failed", state="error", expanded=True)
             
-            if result_df is not None:
-                # Show stats
-                st.success(f"✅ Processed {stats['processed']} transactions")
+            if display_success:
+                st.success(f"Successfully imported {stats['processed']} transactions!")
                 
                 if stats['skipped_duplicate'] > 0:
-                    st.warning(f"⚠️ Skipped {stats['skipped_duplicate']} duplicate transactions")
+                    st.warning(f"Skipped {stats['skipped_duplicate']} duplicate transactions")
                 
                 if stats['skipped_invalid'] > 0:
-                    st.info(f"ℹ️ Skipped {stats['skipped_invalid']} invalid rows")
-                
-                # Preview processed data
-                st.subheader("Processed Transactions")
+                    st.info(f"Skipped {stats['skipped_invalid']} invalid rows")
+                    
                 st.dataframe(result_df, use_container_width=True)
-                
-                # Confirm import
-                if st.button("✅ Confirm Import", type="primary"):
-                    with st.spinner("Saving to database..."):
-                        records = result_df.to_dict('records')
-                        insert_transactions(records)
-                    st.success("Transactions imported successfully!")
-                    st.balloons()
+                st.balloons()
             else:
-                st.error(f"❌ {stats.get('error', 'Unknown error')}")
+                st.error(f"Error: {stats.get('error', 'Unknown error')}")
                 if 'columns_found' in stats:
                     st.info(f"Columns found: {stats['columns_found']}")
 

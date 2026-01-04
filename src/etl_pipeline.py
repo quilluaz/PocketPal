@@ -87,57 +87,32 @@ def get_column_mapping(df: pd.DataFrame, bank_format: str) -> dict:
 # DATA CLEANING
 # ============================================================
 
-def clean_amount(value) -> float:
+# ============================================================
+# DATA CLEANING
+# ============================================================
+
+def clean_amount_vectorized(series: pd.Series) -> pd.Series:
     """
-    Clean and parse an amount value.
+    Clean and parse a series of amount values using vectorized string operations.
     Handles: $1,234.56, (500.00), -500, etc.
     """
-    if pd.isna(value):
-        return 0.0
+    # Convert to string and strip whitespace
+    s = series.astype(str).str.strip()
     
-    # Convert to string
-    amount_str = str(value).strip()
+    # Identify negative values (parentheses or leading minus)
+    is_negative_paren = s.str.startswith("(") & s.str.endswith(")")
+    is_negative_sign = s.str.startswith("-")
+    is_negative = is_negative_paren | is_negative_sign
     
-    # Handle parentheses as negative (accounting format)
-    is_negative = amount_str.startswith("(") and amount_str.endswith(")")
-    if is_negative:
-        amount_str = amount_str[1:-1]
+    # Remove non-numeric characters (except decimal point)
+    # regex matches anything that is NOT a digit or a dot
+    s_clean = s.str.replace(r'[^\d.]', '', regex=True)
     
-    # Remove currency symbols and commas
-    amount_str = re.sub(r'[$,]', '', amount_str)
+    # Convert to float (coerce errors to NaN, then fill with 0)
+    amounts = pd.to_numeric(s_clean, errors='coerce').fillna(0.0)
     
-    # Handle explicit negative sign
-    if amount_str.startswith("-"):
-        is_negative = True
-        amount_str = amount_str[1:]
-    
-    try:
-        amount = float(amount_str)
-        return -amount if is_negative else amount
-    except ValueError:
-        return 0.0
-
-
-def parse_date(value, date_format: str = "%m/%d/%Y") -> str:
-    """
-    Parse a date value and return as YYYY-MM-DD string.
-    """
-    if pd.isna(value):
-        return None
-    
-    date_str = str(value).strip()
-    
-    # Try the specified format first
-    formats_to_try = [date_format, "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y"]
-    
-    for fmt in formats_to_try:
-        try:
-            parsed = datetime.strptime(date_str, fmt)
-            return parsed.strftime("%Y-%m-%d")
-        except ValueError:
-            continue
-    
-    return None
+    # Apply sign
+    return amounts.where(~is_negative, -amounts)
 
 
 # ============================================================
@@ -166,7 +141,7 @@ def categorize_transaction(description: str) -> str:
     Auto-categorize a transaction based on description keywords.
     Returns category string or 'Uncategorized'.
     """
-    if not description:
+    if not isinstance(description, str) or not description:
         return "Uncategorized"
     
     desc_lower = description.lower()
@@ -187,18 +162,9 @@ def process_csv(
     user_id: str,
     account_source: str = "Unknown",
     check_duplicate: Callable = None
-) -> tuple[pd.DataFrame, dict]:
+) -> tuple[pd.DataFrame | None, dict]:
     """
-    Process a bank CSV file.
-    
-    Args:
-        file: Uploaded file object
-        user_id: Current user's ID
-        account_source: Name of the account (e.g., "Chase Sapphire")
-        check_duplicate: Optional function to check for duplicates
-    
-    Returns:
-        (processed_df, stats_dict)
+    Process a bank CSV file using vectorized operations.
     """
     # Read CSV
     try:
@@ -219,14 +185,13 @@ def process_csv(
     
     # Get column mapping
     mapping = get_column_mapping(df, bank_format)
-    if not all(k in mapping for k in ["date", "description", "amount"]):
+    cols_needed = ["date", "description", "amount"]
+    if not all(k in mapping for k in cols_needed):
         return None, {
             "error": f"Missing required columns for {bank_format} format",
             "mapping": mapping
         }
-    
-    # Process rows
-    processed_rows = []
+
     stats = {
         "total_rows": len(df),
         "processed": 0,
@@ -235,43 +200,60 @@ def process_csv(
         "bank_format": bank_format
     }
     
-    for _, row in df.iterrows():
-        # Parse date
-        date = parse_date(row[mapping["date"]], mapping["date_format"])
-        if not date:
-            stats["skipped_invalid"] += 1
-            continue
+    # 1. Vectorized Date Parsing
+    # pd.to_datetime is much faster than iterating
+    # errors='coerce' turns invalid dates into NaT
+    df['parsed_date'] = pd.to_datetime(df[mapping['date']], errors='coerce')
+    
+    # 2. Vectorized Amount Cleaning
+    df['parsed_amount'] = clean_amount_vectorized(df[mapping['amount']])
+    
+    # 3. Filter invalid rows
+    # Drop where date is NaT or amount is 0
+    valid_mask = (df['parsed_date'].notna()) & (df['parsed_amount'] != 0)
+    invalid_count = (~valid_mask).sum()
+    stats["skipped_invalid"] = int(invalid_count)
+    
+    df_clean = df[valid_mask].copy()
+    
+    if df_clean.empty:
+        return None, {**stats, "error": "No valid transactions found after processing"}
+
+    # 4. Prepare Description
+    df_clean['clean_description'] = df_clean[mapping['description']].fillna("").astype(str).str.strip()
+    
+    # 5. Check Duplicates (if checking function provided)
+    # This part is harder to vectorize fully if dependent on DB checks, 
+    # but we can filter against a set if we fetch existing hashes, 
+    # or iterate just the clean rows.
+    # For now, we iterate the clean dataframe which is still an improvement.
+    
+    final_rows = []
+    
+    for _, row in df_clean.iterrows():
+        date_str = row['parsed_date'].strftime("%Y-%m-%d")
+        amount = float(row['parsed_amount'])
+        desc = row['clean_description']
         
-        # Clean amount
-        amount = clean_amount(row[mapping["amount"]])
-        if amount == 0:
-            stats["skipped_invalid"] += 1
-            continue
-        
-        # Get description
-        description = str(row[mapping["description"]]).strip() if pd.notna(row[mapping["description"]]) else ""
-        
-        # Check for duplicates
-        if check_duplicate and check_duplicate(user_id, date, amount, description):
+        # Check duplicate
+        if check_duplicate and check_duplicate(user_id, date_str, amount, desc):
             stats["skipped_duplicate"] += 1
             continue
+            
+        # 6. Auto-Categorize (row-by-row is acceptable here as keyword search is efficient enough)
+        category = categorize_transaction(desc)
         
-        # Auto-categorize
-        category = categorize_transaction(description)
-        
-        # Build transaction record
-        processed_rows.append({
+        final_rows.append({
             "user_id": user_id,
-            "date": date,
-            "description": description,
+            "date": date_str,
+            "description": desc,
             "amount": amount,
             "category": category,
             "account_source": account_source
         })
         stats["processed"] += 1
-    
-    if not processed_rows:
-        return None, {**stats, "error": "No valid transactions found after processing"}
-    
-    result_df = pd.DataFrame(processed_rows)
-    return result_df, stats
+
+    if not final_rows:
+        return None, {**stats, "error": "No valid transactions found after deduplication"}
+        
+    return pd.DataFrame(final_rows), stats
