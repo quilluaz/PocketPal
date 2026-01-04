@@ -26,7 +26,6 @@ def main():
             }
             
             /* Sticky Header Styles */
-            /* Sticky Header Styles */
             /* Target the horizontal block that contains our marker */
             div[data-testid="stHorizontalBlock"]:has(div#sticky-header-marker) {
                 position: fixed;
@@ -41,7 +40,7 @@ def main():
             
             /* Adjust main content padding to not hide behind header */
             .main .block-container {
-                padding-top: 8rem !important; /* Increased padding to account for header height */
+                padding-top: 3rem !important; /* Minimal padding */
             }
             
             /* Hide Streamlit default header/hamburger and other top elements */
@@ -64,6 +63,64 @@ def main():
             div[data-testid="stHorizontalBlock"]:has(div#sticky-header-marker) {
                 top: 0 !important;
                 z-index: 999990 !important; /* Lowered to sit below modals */
+            }
+
+            /* -- BUTTON STYLING (Green Theme) -- */
+            
+            /* Primary Button (Login, Sign Up, etc) */
+            div.stButton > button[kind="primary"],
+            div[data-testid="stForm"] button[kind="primary"],
+            button[kind="primary"] {
+                background-color: #0d3b10 !important; /* Darker Green (Default) */
+                border-color: #0d3b10 !important;
+                color: white !important;
+                transition: all 0.2s ease;
+            }
+            
+            div.stButton > button[kind="primary"]:hover,
+            div[data-testid="stForm"] button[kind="primary"]:hover,
+            button[kind="primary"]:hover {
+                background-color: #1B5E20 !important; /* Lighter Green (Hover) */
+                border-color: #1B5E20 !important;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+                color: white !important;
+            }
+            
+            div.stButton > button[kind="primary"]:focus,
+            div[data-testid="stForm"] button[kind="primary"]:focus,
+            button[kind="primary"]:focus {
+                box-shadow: 0 0 0 2px rgba(27, 94, 32, 0.4) !important;
+                border-color: #1B5E20 !important;
+                color: white !important;
+            }
+
+            /* -- INPUT FIELD STYLING -- */
+            
+            /* Target the input container for border/box-shadow focus changes */
+            div[data-baseweb="input"] {
+                background-color: transparent !important;
+                border-radius: 4px;
+            }
+            
+            /* Aggressive fix for "Dark Spot" / Eye Icon Background */
+            div[data-baseweb="input"] > div:last-child,
+            div[data-baseweb="input"] > div:last-child > div,
+            div[data-baseweb="input"] button {
+                background-color: transparent !important;
+                border: none !important;
+            }
+            
+            /* When the input is focused, change the border of the container */
+            div[data-baseweb="input"]:focus-within {
+                border-color: #1B5E20 !important;
+                box-shadow: 0 0 0 1px #1B5E20 !important;
+            }
+            
+            /* Also ensure the actual input element has no conflicting styles */
+            div[data-testid="stTextInput"] input,
+            div[data-testid="stNumberInput"] input {
+                color: inherit;
+                background-color: transparent !important;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -109,18 +166,22 @@ def render_header():
             """, unsafe_allow_html=True)
         
         with col2:
-            new_currency = st.selectbox(
-                "Currency",
-                options=["USD", "PHP"],
-                index=0 if current_currency == "USD" else 1,
-                label_visibility="collapsed",
-                key="header_currency_selector"
-            )
+            # Use a Popover for a cleaner "Dropdown" UI without text input
+            with st.popover(current_currency, use_container_width=True):
+                if st.button("USD", key="curr_opt_usd", use_container_width=True):
+                    if current_currency != "USD":
+                        update_profile_currency(user_id, "USD")
+                        st.session_state["display_currency"] = "USD"
+                        st.rerun()
+                
+                if st.button("PHP", key="curr_opt_php", use_container_width=True):
+                    if current_currency != "PHP":
+                        update_profile_currency(user_id, "PHP")
+                        st.session_state["display_currency"] = "PHP"
+                        st.rerun()
             
-            if new_currency != current_currency:
-                update_profile_currency(user_id, new_currency)
-                st.rerun()
-            st.session_state["display_currency"] = new_currency
+            # Ensure session state is synced with current profile currency
+            st.session_state["display_currency"] = current_currency
     
         with col3:
             if user:
@@ -139,7 +200,7 @@ def render_main_content():
 
 def render_dashboard():
     # Spacer to push content down below fixed header
-    st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+    # Removed spacer to minimize gap
     
     col1, col2, col3, col4 = st.columns([0.4, 0.2, 0.2, 0.2])
     with col1:

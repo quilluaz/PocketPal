@@ -89,7 +89,7 @@ def create_spending_trend_chart(transactions_df: pd.DataFrame, symbol: str = "$"
     df['date'] = pd.to_datetime(df['date'])
     df['month'] = df['date'].dt.to_period('M').astype(str)
     
-    monthly = df.groupby('month').agg({'amount': lambda x: (x[x > 0].sum(), x[x < 0].sum().abs())}).reset_index()
+    monthly = df.groupby('month').agg({'amount': lambda x: (x[x > 0].sum(), abs(x[x < 0].sum()))}).reset_index()
     monthly['income'], monthly['expenses'] = monthly['amount'].apply(lambda x: x[0]), monthly['amount'].apply(lambda x: x[1])
     monthly['net'] = monthly['income'] - monthly['expenses']
     
@@ -122,7 +122,7 @@ def calculate_kpis(transactions_df: pd.DataFrame, portfolio_value: float = 0) ->
     
     months_span = max(1, (recent['date'].max() - recent['date'].min()).days / 30)
     total_income = recent[recent['amount'] > 0]['amount'].sum()
-    total_expenses = recent[recent['amount'] < 0]['amount'].sum().abs() if not recent[recent['amount'] < 0].empty else 0
+    total_expenses = abs(recent[recent['amount'] < 0]['amount'].sum()) if not recent[recent['amount'] < 0].empty else 0
     
     kpis["monthly_income"], kpis["monthly_expenses"] = total_income / months_span, total_expenses / months_span
     kpis["burn_rate"], net_cash = kpis["monthly_expenses"], total_income - total_expenses
