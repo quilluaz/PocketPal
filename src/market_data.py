@@ -121,3 +121,14 @@ def get_total_portfolio_value(holdings: list) -> float:
                 total += price * quantity
     
     return total
+
+
+@st.cache_data(ttl=3600)
+def get_usd_php_rate():
+    try:
+        # yfinance ticker for USD to PHP
+        ticker = yf.Ticker("PHP=X")
+        data = ticker.history(period="1d")
+        return float(data['Close'].iloc[-1])
+    except:
+        return 56.0 # Fallback rate

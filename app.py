@@ -11,9 +11,9 @@ st.set_page_config(
 )
 
 from src.auth import init_session_state, is_authenticated, render_auth_page, logout, get_current_user_id
-from src.db_connector import get_transactions, insert_transactions, delete_transaction, get_holdings, insert_holding, delete_holding, get_existing_signatures
+from src.db_connector import get_transactions, insert_transactions, delete_transaction, get_holdings, insert_holding, delete_holding, get_existing_signatures, get_profile, update_profile_currency
 from src.etl_pipeline import process_csv
-from src.market_data import calculate_holdings_value, get_total_portfolio_value, validate_ticker
+from src.market_data import calculate_holdings_value, get_total_portfolio_value, validate_ticker, get_usd_php_rate
 from src.visuals import create_sankey_diagram, create_spending_by_category_chart, create_spending_trend_chart, create_holdings_chart, calculate_kpis
 
 
@@ -71,6 +71,25 @@ def render_sidebar():
             label_visibility="collapsed"
         )
         st.session_state["current_page"] = page
+
+        st.divider()
+        
+        # Get profile to see current setting
+        user_id = get_current_user_id()
+        profile = get_profile(user_id)
+        current_currency = profile.get("currency", "USD")
+        
+        new_currency = st.selectbox(
+            "Display Currency",
+            options=["USD", "PHP"],
+            index=0 if current_currency == "USD" else 1
+        )
+        
+        if new_currency != current_currency:
+            update_profile_currency(user_id, new_currency)
+            st.rerun()
+            
+        st.session_state["display_currency"] = new_currency
         
         st.markdown("---")
         
@@ -117,24 +136,28 @@ def render_dashboard():
     
     kpis = calculate_kpis(transactions_df, portfolio_value)
     
+    currency = st.session_state.get("display_currency", "USD")
+    symbol = "₱" if currency == "PHP" else "$"
+    rate = get_usd_php_rate() if currency == "PHP" else 1.0
+    
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         st.metric(
             label="Net Worth",
-            value=f"${kpis['net_worth']:,.2f}"
+            value=f"{symbol}{kpis['net_worth'] * rate:,.2f}"
         )
     
     with col2:
         st.metric(
             label="Monthly Income",
-            value=f"${kpis['monthly_income']:,.2f}"
+            value=f"{symbol}{kpis['monthly_income'] * rate:,.2f}"
         )
     
     with col3:
         st.metric(
             label="Monthly Burn Rate",
-            value=f"${kpis['burn_rate']:,.2f}"
+            value=f"{symbol}{kpis['burn_rate'] * rate:,.2f}"
         )
     
     with col4:

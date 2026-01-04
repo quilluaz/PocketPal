@@ -118,3 +118,8 @@ def get_profile(user_id: str) -> dict:
         .single() \
         .execute()
     return response.data
+
+
+def update_profile_currency(user_id: str, currency: str):
+    client = get_authenticated_client()
+    return client.table("profiles").update({"currency": currency}).eq("id", user_id).execute()
