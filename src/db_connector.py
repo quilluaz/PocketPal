@@ -111,13 +111,13 @@ def delete_holding(holding_id: str) -> bool:
 
 
 def get_profile(user_id: str) -> dict:
-    client = get_authenticated_client()
-    response = client.table("profiles") \
-        .select("*") \
-        .eq("id", user_id) \
-        .single() \
-        .execute()
-    return response.data
+    try:
+        client = get_authenticated_client()
+        response = client.table("profiles").select("*").eq("id", user_id).single().execute()
+        return response.data
+    except Exception:
+        # Fallback if profile doesn't exist yet or fetch fails
+        return {"id": user_id, "currency": "USD"}
 
 
 def update_profile_currency(user_id: str, currency: str):

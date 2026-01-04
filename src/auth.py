@@ -1,10 +1,94 @@
 import streamlit as st
+import time
+import datetime
+import extra_streamlit_components as stx
 from src.db_connector import get_supabase_client
 
 
+
+def get_manager():
+    return st.session_state.get("cookie_manager")
+
+
+def restore_session_from_cookie():
+    cookie_manager = get_manager()
+    cookies = cookie_manager.get_all()
+    
+    access_token = cookies.get("sb_access_token")
+    refresh_token = cookies.get("sb_refresh_token")
+    
+    if access_token and refresh_token:
+        try:
+            client = get_supabase_client()
+            response = client.auth.set_session(access_token, refresh_token)
+            
+            if response.user:
+                st.session_state["authenticated"] = True
+                st.session_state["user"] = response.user
+                st.session_state["access_token"] = response.session.access_token
+                st.session_state["refresh_token"] = response.session.refresh_token
+                return True
+        except Exception:
+            # If invalid, clear cookies
+            cookie_manager.delete("sb_access_token", key="del_inv_at")
+            cookie_manager.delete("sb_refresh_token", key="del_inv_rt")
+            
+    return False
+
+
 def init_session_state():
+    # Initialize CookieManager once per run
+    # This must be done here to ensure the component is rendered every script run to keep it alive
+    manager = stx.CookieManager(key="init_cookie_manager")
+    st.session_state["cookie_manager"] = manager
+
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
+
+    if "cookie_load_attempts" not in st.session_state:
+        st.session_state["cookie_load_attempts"] = 0
+    
+    # Try to restore session if not authenticated
+    if not st.session_state["authenticated"]:
+        restored = restore_session_from_cookie()
+        
+        if not restored and st.session_state["cookie_load_attempts"] < 2:
+            st.session_state["cookie_load_attempts"] += 1
+            
+            # Show white loading spinner
+            st.markdown("""
+                <style>
+                    .stApp > header {visibility: hidden;}
+                    
+                    #loader {
+                        position: fixed;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        z-index: 9999;
+                    }
+                    
+                    .spinner {
+                        width: 50px;
+                        height: 50px;
+                        border: 3px solid rgba(255, 255, 255, 0.3);
+                        border-radius: 50%;
+                        border-top-color: #fff;
+                        animation: spin 1s ease-in-out infinite;
+                    }
+                    
+                    @keyframes spin {
+                        to { transform: rotate(360deg); }
+                    }
+                </style>
+                <div id="loader">
+                    <div class="spinner"></div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            time.sleep(0.5)  # Give CookieManager time to sync
+            st.rerun()
+        
     if "user" not in st.session_state:
         st.session_state["user"] = None
     if "access_token" not in st.session_state:
@@ -25,6 +109,12 @@ def login(email: str, password: str) -> tuple[bool, str]:
         st.session_state["user"] = response.user
         st.session_state["access_token"] = response.session.access_token
         st.session_state["refresh_token"] = response.session.refresh_token
+        
+        # Save tokens to cookies
+        cookie_manager = get_manager()
+        expires_at = datetime.datetime.now() + datetime.timedelta(days=7)
+        cookie_manager.set("sb_access_token", response.session.access_token, expires_at=expires_at, key="set_at")
+        cookie_manager.set("sb_refresh_token", response.session.refresh_token, expires_at=expires_at, key="set_rt")
         
         return True, "Login successful!"
     
@@ -83,6 +173,11 @@ def logout():
         client.auth.sign_out()
     except Exception:
         pass
+    
+    # Clear cookies
+    cookie_manager = get_manager()
+    cookie_manager.delete("sb_access_token", key="del_at")
+    cookie_manager.delete("sb_refresh_token", key="del_rt")
     
     st.session_state["authenticated"] = False
     st.session_state["user"] = None

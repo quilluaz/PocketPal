@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
-import requests
-from streamlit_lottie import st_lottie
+import pandas as pd
 
 st.set_page_config(
     page_title="Pocketpal",
@@ -16,23 +15,6 @@ from src.etl_pipeline import process_csv
 from src.market_data import calculate_holdings_value, get_total_portfolio_value, validate_ticker, get_usd_php_rate
 from src.visuals import create_sankey_diagram, create_spending_by_category_chart, create_spending_trend_chart, create_holdings_chart, calculate_kpis
 
-
-# --- Assets & Config ---
-LORDICON_URLS = {
-    "dashboard": "https://cdn.lordicon.com/qhviklyi.json",  # Placeholder: Chart/Analysis
-    "upload": "https://cdn.lordicon.com/fzewnmpi.json",     # Placeholder: Cloud/Upload
-    "holdings": "https://cdn.lordicon.com/vaeagfzc.json",   # Placeholder: Wallet/Money
-    "transaction": "https://cdn.lordicon.com/xzksbhzh.json", # Placeholder: Add/Plus
-    "sidebar_logo": "https://cdn.lordicon.com/dycatgju.json" # Placeholder: Rocket/Launch
-}
-
-def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200:
-        return None
-    return r.json()
-
-
 def main():
     # Inject Custom CSS for Font
     st.markdown("""
@@ -41,6 +23,47 @@ def main():
             
             html, body, [class*="css"] {
                 font-family: 'Space Grotesk', sans-serif;
+            }
+            
+            /* Sticky Header Styles */
+            /* Sticky Header Styles */
+            /* Target the horizontal block that contains our marker */
+            div[data-testid="stHorizontalBlock"]:has(div#sticky-header-marker) {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                z-index: 999990;
+                background-color: #0e1117; /* Default Streamlit Dark */
+                padding: 1rem 2rem;
+                border-bottom: 1px solid #30333d;
+            }
+            
+            /* Adjust main content padding to not hide behind header */
+            .main .block-container {
+                padding-top: 8rem !important; /* Increased padding to account for header height */
+            }
+            
+            /* Hide Streamlit default header/hamburger and other top elements */
+            header[data-testid="stHeader"],
+            div[data-testid="stDecoration"],
+            div[data-testid="stToolbar"],
+            div[data-testid="stStatusWidget"],
+            .stDeployButton {
+                display: none !important;
+                visibility: hidden !important;
+                height: 0 !important;
+            }
+            
+            /* Additional safety for different streamlit versions */
+            .stApp > header {
+                display: none !important;
+            }
+            
+            /* Ensure our header is absolutely on top */
+            div[data-testid="stHorizontalBlock"]:has(div#sticky-header-marker) {
+                top: 0 !important;
+                z-index: 999990 !important; /* Lowered to sit below modals */
             }
         </style>
     """, unsafe_allow_html=True)
@@ -51,161 +74,143 @@ def main():
         render_auth_page()
         return
     
-    render_sidebar()
     render_main_content()
 
 
-def render_sidebar():
-    with st.sidebar:
-        lottie_logo = load_lottieurl(LORDICON_URLS["sidebar_logo"])
-        if lottie_logo:
-            st_lottie(lottie_logo, height=100, key="sidebar_logo")
-        else:
-            st.title("Pocketpal")
+def render_header():
+    # Get profile to see current setting
+    user_id = get_current_user_id()
+    if not user_id: return
+    
+    profile = get_profile(user_id)
+    current_currency = profile.get("currency", "USD")
+    user = st.session_state.get("user")
+    
+    # Create the sticky header container
+    # We put a marker div inside col1 so our CSS can find the horizontal block
+    with st.container():
+        col1, col2, col3, col4 = st.columns([6, 1, 2, 1])
+        
+        with col1:
+            # Combine marker and logo to prevent Streamlit from adding vertical space between them
+            st.markdown("""
+                <div id="sticky-header-marker"></div>
+                <div style='
+                    display: flex; 
+                    align-items: center; 
+                    height: 45px; 
+                    font-size: 24px; 
+                    font-weight: 700; 
+                    white-space: nowrap;
+                    margin: 0;
+                '>
+                    Pocketpal
+                </div>
+            """, unsafe_allow_html=True)
+        
+        with col2:
+            new_currency = st.selectbox(
+                "Currency",
+                options=["USD", "PHP"],
+                index=0 if current_currency == "USD" else 1,
+                label_visibility="collapsed",
+                key="header_currency_selector"
+            )
             
-        st.markdown("---")
-        
-        page = st.radio(
-            "Navigate",
-            ["Dashboard", "Upload CSV", "Holdings", "Add Transaction"],
-            label_visibility="collapsed"
-        )
-        st.session_state["current_page"] = page
-
-        st.divider()
-        
-        # Get profile to see current setting
-        user_id = get_current_user_id()
-        profile = get_profile(user_id)
-        current_currency = profile.get("currency", "USD")
-        
-        new_currency = st.selectbox(
-            "Display Currency",
-            options=["USD", "PHP"],
-            index=0 if current_currency == "USD" else 1
-        )
-        
-        if new_currency != current_currency:
-            update_profile_currency(user_id, new_currency)
-            st.rerun()
-            
-        st.session_state["display_currency"] = new_currency
-        
-        st.markdown("---")
-        
-        user = st.session_state.get("user")
-        if user:
-            st.caption(f"Logged in as: {user.email}")
-        
-        if st.button("Logout", use_container_width=True):
-            logout()
-            st.rerun()
+            if new_currency != current_currency:
+                update_profile_currency(user_id, new_currency)
+                st.rerun()
+            st.session_state["display_currency"] = new_currency
+    
+        with col3:
+            if user:
+                st.markdown(f"<div style='text-align: right; user-select: none; padding-top: 8px;'>{user.email}</div>", unsafe_allow_html=True)
+    
+        with col4:
+            if st.button("Logout", use_container_width=True, key="header_logout"):
+                logout()
+                st.rerun()
 
 
 def render_main_content():
-    page = st.session_state.get("current_page", "Dashboard")
-    
-    if page == "Dashboard":
-        render_dashboard()
-    elif page == "Upload CSV":
-        render_upload_page()
-    elif page == "Holdings":
-        render_holdings_page()
-    elif page == "Add Transaction":
-        render_add_transaction_page()
+    render_header()
+    render_dashboard()
 
 
 def render_dashboard():
-    col1, col2 = st.columns([1, 5])
+    # Spacer to push content down below fixed header
+    st.markdown("<div style='height: 80px;'></div>", unsafe_allow_html=True)
+    
+    col1, col2, col3, col4 = st.columns([0.4, 0.2, 0.2, 0.2])
     with col1:
-        lottie_dash = load_lottieurl(LORDICON_URLS["dashboard"])
-        if lottie_dash:
-            st_lottie(lottie_dash, height=60, key="dash_header")
-    with col2:
         st.title("Dashboard")
+    with col2:
+        if st.button("Upload CSV", use_container_width=True):
+            open_upload_csv_modal()
+    with col3:
+        if st.button("Holdings", use_container_width=True):
+            open_holdings_modal()
+    with col4:
+        if st.button("Add Transaction", type="primary", use_container_width=True):
+            open_add_transaction_modal()
     
     user_id = get_current_user_id()
-    
+    currency = st.session_state.get("display_currency", "USD")
+    symbol = "₱" if currency == "PHP" else "$"
+    rate = get_usd_php_rate() if currency == "PHP" else 1.0
+
     with st.spinner("Loading data..."):
         transactions = get_transactions(user_id)
         holdings = get_holdings(user_id)
         enriched_holdings = calculate_holdings_value(holdings) if holdings else []
         portfolio_value = get_total_portfolio_value(enriched_holdings)
     
+    # Process transactions for currency
     transactions_df = pd.DataFrame(transactions) if transactions else pd.DataFrame()
-    
-    kpis = calculate_kpis(transactions_df, portfolio_value)
-    
-    currency = st.session_state.get("display_currency", "USD")
-    symbol = "₱" if currency == "PHP" else "$"
-    rate = get_usd_php_rate() if currency == "PHP" else 1.0
+    if not transactions_df.empty:
+        transactions_df['amount'] = transactions_df['amount'] * rate
+
+    # Calculate KPIs with converted values
+    kpis = calculate_kpis(transactions_df, portfolio_value * rate)
     
     col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label="Net Worth",
-            value=f"{symbol}{kpis['net_worth'] * rate:,.2f}"
-        )
-    
-    with col2:
-        st.metric(
-            label="Monthly Income",
-            value=f"{symbol}{kpis['monthly_income'] * rate:,.2f}"
-        )
-    
-    with col3:
-        st.metric(
-            label="Monthly Burn Rate",
-            value=f"{symbol}{kpis['burn_rate'] * rate:,.2f}"
-        )
-    
-    with col4:
-        savings_color = "normal" if kpis['savings_rate'] >= 0 else "inverse"
-        st.metric(
-            label="Savings Rate",
-            value=f"{kpis['savings_rate']:.1f}%"
-        )
+    col1.metric("Net Worth", f"{symbol}{kpis['net_worth']:,.2f}")
+    col2.metric("Monthly Income", f"{symbol}{kpis['monthly_income']:,.2f}")
+    col3.metric("Monthly Burn Rate", f"{symbol}{kpis['burn_rate']:,.2f}")
+    col4.metric("Savings Rate", f"{kpis['savings_rate']:.1f}%")
     
     st.markdown("---")
     
     if not transactions_df.empty:
         st.subheader("Cash Flow")
+        transactions_df['date'] = pd.to_datetime(transactions_df['date'])
         
-        col1, col2 = st.columns(2)
-        with col1:
-            if 'date' in transactions_df.columns:
-                transactions_df['date'] = pd.to_datetime(transactions_df['date'])
-                min_date = transactions_df['date'].min().date()
-                max_date = transactions_df['date'].max().date()
-                
-                date_range = st.date_input(
-                    "Date Range",
-                    value=(min_date, max_date),
-                    min_value=min_date,
-                    max_value=max_date
-                )
-                
-                if len(date_range) == 2:
-                    mask = (transactions_df['date'].dt.date >= date_range[0]) & \
-                           (transactions_df['date'].dt.date <= date_range[1])
-                    filtered_df = transactions_df[mask]
-                else:
-                    filtered_df = transactions_df
-            else:
-                filtered_df = transactions_df
+        # Determine date range limits
+        min_date = transactions_df['date'].min().date()
+        max_date = transactions_df['date'].max().date()
         
-        sankey_fig = create_sankey_diagram(filtered_df)
+        date_range = st.date_input(
+            "Date Range",
+            value=(min_date, max_date),
+            min_value=min_date,
+            max_value=max_date
+        )
+        
+        filtered_df = transactions_df
+        if len(date_range) == 2:
+            mask = (transactions_df['date'].dt.date >= date_range[0]) & \
+                   (transactions_df['date'].dt.date <= date_range[1])
+            filtered_df = transactions_df[mask]
+        
+        sankey_fig = create_sankey_diagram(filtered_df, symbol=symbol)
         st.plotly_chart(sankey_fig, use_container_width=True)
         
         col1, col2 = st.columns(2)
-        
         with col1:
-            trend_fig = create_spending_trend_chart(transactions_df)
+            trend_fig = create_spending_trend_chart(transactions_df, symbol=symbol)
             st.plotly_chart(trend_fig, use_container_width=True)
-        
         with col2:
-            category_fig = create_spending_by_category_chart(filtered_df)
+            category_fig = create_spending_by_category_chart(filtered_df, symbol=symbol)
             st.plotly_chart(category_fig, use_container_width=True)
     else:
         st.info("No transactions yet. Upload a CSV or add transactions manually to get started!")
@@ -214,12 +219,16 @@ def render_dashboard():
         st.markdown("---")
         st.subheader("💼 Portfolio Summary")
         
+        # Convert holding values for the table
+        for h in enriched_holdings:
+            for key in ['current_price', 'current_value', 'cost_basis', 'gain']:
+                if h.get(key):
+                    h[key] = h[key] * rate
+
         col1, col2 = st.columns(2)
-        
         with col1:
             holdings_fig = create_holdings_chart(enriched_holdings)
             st.plotly_chart(holdings_fig, use_container_width=True)
-        
         with col2:
             holdings_df = pd.DataFrame(enriched_holdings)
             display_cols = ['ticker', 'quantity', 'current_price', 'current_value', 'gain_pct']
@@ -228,45 +237,33 @@ def render_dashboard():
             if available_cols:
                 st.dataframe(
                     holdings_df[available_cols].style.format({
-                        'current_price': '${:,.2f}',
-                        'current_value': '${:,.2f}',
+                        'current_price': f'{symbol}{{:.2f}}', 
+                        'current_value': f'{symbol}{{:.2f}}', 
                         'gain_pct': '{:+.2f}%'
                     }, na_rep='-'),
                     use_container_width=True
                 )
 
 
-def render_upload_page():
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        lottie_upload = load_lottieurl(LORDICON_URLS["upload"])
-        if lottie_upload:
-            st_lottie(lottie_upload, height=60, key="upload_header")
-    with col2:
-        st.title("Upload Bank CSV")
-    
+@st.dialog("Upload Bank CSV")
+def open_upload_csv_modal():
     user_id = get_current_user_id()
     
     st.markdown("""
-    Upload a CSV export from your bank. Supported formats:
+    Supported formats:
     - **Chase** (Credit Card, Checking)
     - **Wells Fargo**
     - **Bank of America**
     - **Generic** (columns: date, description, amount)
     """)
     
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
-    
-    with col2:
-        account_source = st.text_input("Account Name", placeholder="e.g., Chase Sapphire")
+    uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
+    account_source = st.text_input("Account Name", placeholder="e.g., Chase Sapphire")
     
     if uploaded_file is not None:
         st.subheader("Preview")
         preview_df = pd.read_csv(uploaded_file)
-        st.dataframe(preview_df.head(10), use_container_width=True)
+        st.dataframe(preview_df.head(5), use_container_width=True, height=150)
         
         uploaded_file.seek(0)
         
@@ -303,23 +300,15 @@ def render_upload_page():
                 if stats['skipped_invalid'] > 0:
                     st.info(f"Skipped {stats['skipped_invalid']} invalid rows")
                     
-                st.dataframe(result_df, use_container_width=True)
                 st.balloons()
+                if st.button("Close"):
+                    st.rerun()
             else:
                 st.error(f"Error: {stats.get('error', 'Unknown error')}")
-                if 'columns_found' in stats:
-                    st.info(f"Columns found: {stats['columns_found']}")
 
 
-def render_holdings_page():
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        lottie_hold = load_lottieurl(LORDICON_URLS["holdings"])
-        if lottie_hold:
-            st_lottie(lottie_hold, height=60, key="holdings_header")
-    with col2:
-        st.title("Investment Holdings")
-    
+@st.dialog("Investment Holdings", width="large")
+def open_holdings_modal():
     user_id = get_current_user_id()
     
     with st.spinner("Fetching prices..."):
@@ -392,15 +381,8 @@ def render_holdings_page():
         st.info("No holdings yet. Add your first investment above!")
 
 
-def render_add_transaction_page():
-    col1, col2 = st.columns([1, 5])
-    with col1:
-        lottie_txn = load_lottieurl(LORDICON_URLS["transaction"])
-        if lottie_txn:
-            st_lottie(lottie_txn, height=60, key="txn_header")
-    with col2:
-        st.title("Add Transaction")
-    
+@st.dialog("Add Transaction")
+def open_add_transaction_modal():
     user_id = get_current_user_id()
     
     with st.form("add_transaction_form"):
@@ -439,31 +421,7 @@ def render_add_transaction_page():
                 insert_transactions([transaction])
                 st.success("Transaction added successfully!")
                 st.balloons()
-    
-    st.markdown("---")
-    st.subheader("Recent Transactions")
-    
-    transactions = get_transactions(user_id, limit=20)
-    
-    if transactions:
-        for txn in transactions:
-            with st.container():
-                col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 1])
-                
-                col1.write(txn['date'])
-                col2.write(txn['description'][:40] + "..." if len(txn['description']) > 40 else txn['description'])
-                
-                amount = txn['amount']
-                color = "green" if amount > 0 else "red"
-                col3.markdown(f":{color}[${abs(amount):,.2f}]")
-                
-                col4.write(txn['category'])
-                
-                if col5.button("🗑️", key=f"del_txn_{txn['id']}"):
-                    delete_transaction(txn['id'])
-                    st.rerun()
-    else:
-        st.info("No transactions yet.")
+                st.rerun()
 
 
 if __name__ == "__main__":
