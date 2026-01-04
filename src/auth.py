@@ -1,13 +1,8 @@
-"""
-Authentication module for Supabase GoTrue integration.
-Handles login, signup, password reset, and session management.
-"""
 import streamlit as st
 from src.db_connector import get_supabase_client
 
 
 def init_session_state():
-    """Initialize authentication-related session state variables."""
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
     if "user" not in st.session_state:
@@ -19,10 +14,6 @@ def init_session_state():
 
 
 def login(email: str, password: str) -> tuple[bool, str]:
-    """
-    Attempt to log in with email and password.
-    Returns (success: bool, message: str)
-    """
     try:
         client = get_supabase_client()
         response = client.auth.sign_in_with_password({
@@ -30,7 +21,6 @@ def login(email: str, password: str) -> tuple[bool, str]:
             "password": password
         })
         
-        # Store session info
         st.session_state["authenticated"] = True
         st.session_state["user"] = response.user
         st.session_state["access_token"] = response.session.access_token
@@ -49,10 +39,6 @@ def login(email: str, password: str) -> tuple[bool, str]:
 
 
 def signup(email: str, password: str) -> tuple[bool, str]:
-    """
-    Create a new account with email and password.
-    Returns (success: bool, message: str)
-    """
     try:
         client = get_supabase_client()
         response = client.auth.sign_up({
@@ -84,10 +70,6 @@ def signup(email: str, password: str) -> tuple[bool, str]:
 
 
 def reset_password(email: str) -> tuple[bool, str]:
-    """
-    Send a password reset email.
-    Returns (success: bool, message: str)
-    """
     try:
         client = get_supabase_client()
         client.auth.reset_password_for_email(email)
@@ -97,14 +79,12 @@ def reset_password(email: str) -> tuple[bool, str]:
 
 
 def logout():
-    """Log out the current user and clear session state."""
     try:
         client = get_supabase_client()
         client.auth.sign_out()
     except Exception:
-        pass  # Ignore errors during logout
+        pass
     
-    # Clear session state
     st.session_state["authenticated"] = False
     st.session_state["user"] = None
     st.session_state["access_token"] = None
@@ -112,19 +92,16 @@ def logout():
 
 
 def get_current_user_id() -> str | None:
-    """Get the current authenticated user's ID."""
     if st.session_state.get("user"):
         return st.session_state["user"].id
     return None
 
 
 def is_authenticated() -> bool:
-    """Check if user is currently authenticated."""
     return st.session_state.get("authenticated", False)
 
 
 def render_auth_page():
-    """Render the login/signup page."""
     st.title("🏦 Personal Finance HQ")
     st.markdown("---")
     

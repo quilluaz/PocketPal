@@ -1,7 +1,3 @@
-"""
-Market data module for fetching real-time stock and crypto prices.
-Uses yfinance with caching to avoid rate limiting.
-"""
 import streamlit as st
 import yfinance as yf
 from datetime import datetime, timedelta
@@ -14,16 +10,6 @@ CACHE_TTL = 300
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_current_price(ticker: str) -> Optional[float]:
-    """
-    Fetch the current price for a ticker symbol.
-    Cached for 5 minutes to avoid rate limiting.
-    
-    Args:
-        ticker: Stock/crypto ticker (e.g., "AAPL", "BTC-USD")
-    
-    Returns:
-        Current price as float, or None if failed
-    """
     try:
         stock = yf.Ticker(ticker)
         # Try to get the current price from fast_info first
@@ -44,16 +30,6 @@ def get_current_price(ticker: str) -> Optional[float]:
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_price_history(ticker: str, period: str = "1mo") -> dict:
-    """
-    Fetch price history for a ticker.
-    
-    Args:
-        ticker: Stock/crypto ticker
-        period: Time period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, ytd, max)
-    
-    Returns:
-        Dict with dates and prices, or empty dict if failed
-    """
     try:
         stock = yf.Ticker(ticker)
         hist = stock.history(period=period)
@@ -71,15 +47,6 @@ def get_price_history(ticker: str, period: str = "1mo") -> dict:
 
 @st.cache_data(ttl=CACHE_TTL)
 def get_ticker_info(ticker: str) -> dict:
-    """
-    Get basic info about a ticker.
-    
-    Args:
-        ticker: Stock/crypto ticker
-    
-    Returns:
-        Dict with name, currency, and other info
-    """
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -95,9 +62,6 @@ def get_ticker_info(ticker: str) -> dict:
 
 
 def validate_ticker(ticker: str) -> bool:
-    """
-    Check if a ticker symbol is valid.
-    """
     price = get_current_price(ticker)
     return price is not None
 
@@ -105,12 +69,7 @@ def validate_ticker(ticker: str) -> bool:
 def calculate_holdings_value(holdings: list) -> list:
     """
     Calculate current value and gains for a list of holdings.
-    
-    Args:
-        holdings: List of holding dicts with ticker, quantity, avg_cost
-    
-    Returns:
-        List of holdings with added current_price, current_value, gain, gain_pct
+    Returns list of holdings with added current_price, current_value, gain, gain_pct.
     """
     enriched = []
     
@@ -148,19 +107,9 @@ def calculate_holdings_value(holdings: list) -> list:
 
 
 def get_total_portfolio_value(holdings: list) -> float:
-    """
-    Calculate total portfolio value from holdings.
-    
-    Args:
-        holdings: List of holdings (can be raw or enriched)
-    
-    Returns:
-        Total portfolio value
-    """
     total = 0.0
     
     for holding in holdings:
-        # Check if already enriched
         if "current_value" in holding and holding["current_value"]:
             total += holding["current_value"]
         else:

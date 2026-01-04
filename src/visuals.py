@@ -1,7 +1,3 @@
-"""
-Visualization module for generating Plotly charts.
-Includes Sankey diagrams, line charts, and KPI cards.
-"""
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
@@ -15,25 +11,19 @@ def create_sankey_diagram(transactions_df: pd.DataFrame, title: str = "Cash Flow
     Args:
         transactions_df: DataFrame with amount and category columns
         title: Chart title
-    
-    Returns:
-        Plotly Figure object
     """
     if transactions_df.empty:
         return _empty_chart("No transactions to display")
     
-    # Separate income and expenses
     income_df = transactions_df[transactions_df['amount'] > 0].copy()
     expense_df = transactions_df[transactions_df['amount'] < 0].copy()
     
-    # Group by category
     income_by_cat = income_df.groupby('category')['amount'].sum().abs()
     expense_by_cat = expense_df.groupby('category')['amount'].sum().abs()
     
     if income_by_cat.empty and expense_by_cat.empty:
         return _empty_chart("No income or expenses found")
     
-    # Build Sankey nodes and links
     nodes = []
     node_colors = []
     links_source = []
@@ -46,7 +36,7 @@ def create_sankey_diagram(transactions_df: pd.DataFrame, title: str = "Cash Flow
     for cat in income_by_cat.index:
         income_idx[cat] = len(nodes)
         nodes.append(cat)
-        node_colors.append("#22c55e")  # Green for income
+        node_colors.append("#22c55e")
     
     # Central "Income" node
     income_node_idx = len(nodes)
@@ -63,7 +53,7 @@ def create_sankey_diagram(transactions_df: pd.DataFrame, title: str = "Cash Flow
     for cat in expense_by_cat.index:
         expense_idx[cat] = len(nodes)
         nodes.append(cat)
-        node_colors.append("#ef4444")  # Red for expenses
+        node_colors.append("#ef4444")
     
     # Links: Income sources → Total Income
     for cat, amount in income_by_cat.items():
@@ -87,7 +77,6 @@ def create_sankey_diagram(transactions_df: pd.DataFrame, title: str = "Cash Flow
         links_value.append(amount)
         links_color.append("rgba(239, 68, 68, 0.4)")
     
-    # Create figure
     fig = go.Figure(data=[go.Sankey(
         node=dict(
             pad=15,
@@ -116,13 +105,9 @@ def create_sankey_diagram(transactions_df: pd.DataFrame, title: str = "Cash Flow
 
 
 def create_spending_by_category_chart(transactions_df: pd.DataFrame) -> go.Figure:
-    """
-    Create a bar chart showing spending by category.
-    """
     if transactions_df.empty:
         return _empty_chart("No transactions to display")
     
-    # Only expenses (negative amounts)
     expenses = transactions_df[transactions_df['amount'] < 0].copy()
     expenses['amount'] = expenses['amount'].abs()
     
@@ -153,9 +138,6 @@ def create_spending_by_category_chart(transactions_df: pd.DataFrame) -> go.Figur
 
 
 def create_spending_trend_chart(transactions_df: pd.DataFrame) -> go.Figure:
-    """
-    Create a line chart showing spending over time.
-    """
     if transactions_df.empty:
         return _empty_chart("No transactions to display")
     
@@ -163,7 +145,6 @@ def create_spending_trend_chart(transactions_df: pd.DataFrame) -> go.Figure:
     df['date'] = pd.to_datetime(df['date'])
     df['month'] = df['date'].dt.to_period('M').astype(str)
     
-    # Separate income and expenses
     monthly = df.groupby('month').agg({
         'amount': lambda x: (x[x > 0].sum(), x[x < 0].sum().abs())
     }).reset_index()
@@ -212,13 +193,9 @@ def create_spending_trend_chart(transactions_df: pd.DataFrame) -> go.Figure:
 
 
 def create_holdings_chart(holdings: list) -> go.Figure:
-    """
-    Create a pie chart showing portfolio allocation.
-    """
     if not holdings:
         return _empty_chart("No holdings to display")
     
-    # Filter holdings with valid current value
     valid_holdings = [h for h in holdings if h.get('current_value')]
     
     if not valid_holdings:
@@ -247,13 +224,7 @@ def create_holdings_chart(holdings: list) -> go.Figure:
 def calculate_kpis(transactions_df: pd.DataFrame, portfolio_value: float = 0) -> dict:
     """
     Calculate key performance indicators.
-    
-    Returns dict with:
-        - net_worth: portfolio_value + net cash
-        - monthly_income: average monthly income (last 3 months)
-        - monthly_expenses: average monthly expenses (last 3 months)
-        - burn_rate: monthly_expenses
-        - savings_rate: (income - expenses) / income * 100
+    Returns dict with net_worth, monthly_income, monthly_expenses, burn_rate, savings_rate.
     """
     kpis = {
         "net_worth": portfolio_value,
@@ -274,9 +245,8 @@ def calculate_kpis(transactions_df: pd.DataFrame, portfolio_value: float = 0) ->
     recent = df[df['date'] >= three_months_ago]
     
     if recent.empty:
-        recent = df  # Fall back to all data
+        recent = df
     
-    # Calculate monthly averages
     months_span = max(1, (recent['date'].max() - recent['date'].min()).days / 30)
     
     total_income = recent[recent['amount'] > 0]['amount'].sum()
@@ -286,11 +256,9 @@ def calculate_kpis(transactions_df: pd.DataFrame, portfolio_value: float = 0) ->
     kpis["monthly_expenses"] = total_expenses / months_span
     kpis["burn_rate"] = kpis["monthly_expenses"]
     
-    # Net worth includes portfolio + net cash flow
     net_cash = total_income - total_expenses
     kpis["net_worth"] = portfolio_value + net_cash
     
-    # Savings rate
     if kpis["monthly_income"] > 0:
         monthly_savings = kpis["monthly_income"] - kpis["monthly_expenses"]
         kpis["savings_rate"] = (monthly_savings / kpis["monthly_income"]) * 100
@@ -299,7 +267,6 @@ def calculate_kpis(transactions_df: pd.DataFrame, portfolio_value: float = 0) ->
 
 
 def _empty_chart(message: str) -> go.Figure:
-    """Create an empty chart with a message."""
     fig = go.Figure()
     fig.add_annotation(
         text=message,

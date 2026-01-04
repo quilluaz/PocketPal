@@ -1,15 +1,7 @@
-"""
-ETL Pipeline for processing bank CSV exports.
-Handles detection, parsing, cleaning, and categorization.
-"""
 import pandas as pd
 import re
 from datetime import datetime
 
-
-# ============================================================
-# BANK FORMAT DETECTION
-# ============================================================
 
 BANK_FORMATS = {
     "chase": {
@@ -44,10 +36,6 @@ BANK_FORMATS = {
 
 
 def detect_bank_format(df: pd.DataFrame) -> str:
-    """
-    Detect which bank format the CSV uses based on column headers.
-    Returns the bank format key or 'unknown'.
-    """
     columns_lower = [col.lower() for col in df.columns]
     
     for bank, config in BANK_FORMATS.items():
@@ -59,10 +47,6 @@ def detect_bank_format(df: pd.DataFrame) -> str:
 
 
 def get_column_mapping(df: pd.DataFrame, bank_format: str) -> dict:
-    """
-    Get the column name mapping for a specific bank format.
-    Handles case-insensitive matching.
-    """
     if bank_format not in BANK_FORMATS:
         return {}
     
@@ -82,41 +66,24 @@ def get_column_mapping(df: pd.DataFrame, bank_format: str) -> dict:
     return mapping
 
 
-# ============================================================
-# DATA CLEANING
-# ============================================================
-
-# ============================================================
-# DATA CLEANING
-# ============================================================
-
 def clean_amount_vectorized(series: pd.Series) -> pd.Series:
     """
     Clean and parse a series of amount values using vectorized string operations.
     Handles: $1,234.56, (500.00), -500, etc.
     """
-    # Convert to string and strip whitespace
     s = series.astype(str).str.strip()
     
-    # Identify negative values (parentheses or leading minus)
     is_negative_paren = s.str.startswith("(") & s.str.endswith(")")
     is_negative_sign = s.str.startswith("-")
     is_negative = is_negative_paren | is_negative_sign
     
-    # Remove non-numeric characters (except decimal point)
-    # regex matches anything that is NOT a digit or a dot
+    # Regex matches anything that is NOT a digit or a dot
     s_clean = s.str.replace(r'[^\d.]', '', regex=True)
     
-    # Convert to float (coerce errors to NaN, then fill with 0)
     amounts = pd.to_numeric(s_clean, errors='coerce').fillna(0.0)
     
-    # Apply sign
     return amounts.where(~is_negative, -amounts)
 
-
-# ============================================================
-# AUTO-CATEGORIZATION
-# ============================================================
 
 CATEGORY_KEYWORDS = {
     "Housing": ["rent", "mortgage", "property tax", "hoa"],
@@ -136,10 +103,6 @@ CATEGORY_KEYWORDS = {
 
 
 def categorize_transaction(description: str) -> str:
-    """
-    Auto-categorize a transaction based on description keywords.
-    Returns category string or 'Uncategorized'.
-    """
     if not isinstance(description, str) or not description:
         return "Uncategorized"
     
@@ -151,10 +114,6 @@ def categorize_transaction(description: str) -> str:
     
     return "Uncategorized"
 
-
-# ============================================================
-# MAIN ETL FUNCTION
-# ============================================================
 
 def process_csv(
     file,
@@ -168,7 +127,6 @@ def process_csv(
     Args:
         existing_signatures: Optional set of (date, amount, description) tuples for O(1) dedup
     """
-    # Read CSV
     try:
         df = pd.read_csv(file)
     except Exception as e:
@@ -177,7 +135,6 @@ def process_csv(
     if df.empty:
         return None, {"error": "CSV file is empty"}
     
-    # Detect bank format
     bank_format = detect_bank_format(df)
     if bank_format == "unknown":
         return None, {
@@ -185,7 +142,6 @@ def process_csv(
             "columns_found": list(df.columns)
         }
     
-    # Get column mapping
     mapping = get_column_mapping(df, bank_format)
     cols_needed = ["date", "description", "amount"]
     if not all(k in mapping for k in cols_needed):
@@ -202,13 +158,12 @@ def process_csv(
         "bank_format": bank_format
     }
     
-    # 1. Vectorized Date Parsing
+    # Vectorized Date Parsing
     df['parsed_date'] = pd.to_datetime(df[mapping['date']], errors='coerce')
     
-    # 2. Vectorized Amount Cleaning
+    # Vectorized Amount Cleaning
     df['parsed_amount'] = clean_amount_vectorized(df[mapping['amount']])
     
-    # 3. Filter invalid rows
     valid_mask = (df['parsed_date'].notna()) & (df['parsed_amount'] != 0)
     invalid_count = (~valid_mask).sum()
     stats["skipped_invalid"] = int(invalid_count)
@@ -218,10 +173,8 @@ def process_csv(
     if df_clean.empty:
         return None, {**stats, "error": "No valid transactions found after processing"}
 
-    # 4. Prepare Description
     df_clean['clean_description'] = df_clean[mapping['description']].fillna("").astype(str).str.strip()
     
-    # 5. Build final rows with O(1) deduplication
     final_rows = []
     
     for _, row in df_clean.iterrows():
@@ -234,7 +187,6 @@ def process_csv(
             stats["skipped_duplicate"] += 1
             continue
             
-        # 6. Auto-Categorize (row-by-row is acceptable here as keyword search is efficient enough)
         category = categorize_transaction(desc)
         
         final_rows.append({

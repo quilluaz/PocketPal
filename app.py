@@ -1,10 +1,6 @@
-"""
-Personal Finance HQ - Main Application Entry Point
-"""
 import streamlit as st
 import pandas as pd
 
-# Page config must be first Streamlit command
 st.set_page_config(
     page_title="Personal Finance HQ",
     page_icon="🏦",
@@ -20,27 +16,21 @@ from src.visuals import create_sankey_diagram, create_spending_by_category_chart
 
 
 def main():
-    """Main application entry point."""
-    # Initialize session state
     init_session_state()
     
-    # Check authentication
     if not is_authenticated():
         render_auth_page()
         return
     
-    # Authenticated - show main app
     render_sidebar()
     render_main_content()
 
 
 def render_sidebar():
-    """Render the sidebar with navigation and quick actions."""
     with st.sidebar:
         st.title("🏦 Finance HQ")
         st.markdown("---")
         
-        # Navigation
         page = st.radio(
             "Navigate",
             ["📊 Dashboard", "📤 Upload CSV", "💼 Holdings", "➕ Add Transaction"],
@@ -50,7 +40,6 @@ def render_sidebar():
         
         st.markdown("---")
         
-        # User info
         user = st.session_state.get("user")
         if user:
             st.caption(f"Logged in as: {user.email}")
@@ -61,7 +50,6 @@ def render_sidebar():
 
 
 def render_main_content():
-    """Render the main content area based on selected page."""
     page = st.session_state.get("current_page", "📊 Dashboard")
     
     if page == "📊 Dashboard":
@@ -75,25 +63,20 @@ def render_main_content():
 
 
 def render_dashboard():
-    """Render the main dashboard with KPIs and charts."""
     st.title("📊 Dashboard")
     
     user_id = get_current_user_id()
     
-    # Fetch data
     with st.spinner("Loading data..."):
         transactions = get_transactions(user_id)
         holdings = get_holdings(user_id)
         enriched_holdings = calculate_holdings_value(holdings) if holdings else []
         portfolio_value = get_total_portfolio_value(enriched_holdings)
     
-    # Convert to DataFrame
     transactions_df = pd.DataFrame(transactions) if transactions else pd.DataFrame()
     
-    # Calculate KPIs
     kpis = calculate_kpis(transactions_df, portfolio_value)
     
-    # KPI Cards
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
@@ -123,12 +106,9 @@ def render_dashboard():
     
     st.markdown("---")
     
-    # Charts
     if not transactions_df.empty:
-        # Sankey Diagram
         st.subheader("Cash Flow")
         
-        # Date filter
         col1, col2 = st.columns(2)
         with col1:
             if 'date' in transactions_df.columns:
@@ -152,11 +132,9 @@ def render_dashboard():
             else:
                 filtered_df = transactions_df
         
-        # Display Sankey
         sankey_fig = create_sankey_diagram(filtered_df)
         st.plotly_chart(sankey_fig, use_container_width=True)
         
-        # Additional charts
         col1, col2 = st.columns(2)
         
         with col1:
@@ -169,7 +147,6 @@ def render_dashboard():
     else:
         st.info("No transactions yet. Upload a CSV or add transactions manually to get started!")
     
-    # Holdings summary
     if enriched_holdings:
         st.markdown("---")
         st.subheader("💼 Portfolio Summary")
@@ -197,7 +174,6 @@ def render_dashboard():
 
 
 def render_upload_page():
-    """Render the CSV upload page."""
     st.title("📤 Upload Bank CSV")
     
     user_id = get_current_user_id()
@@ -219,12 +195,10 @@ def render_upload_page():
         account_source = st.text_input("Account Name", placeholder="e.g., Chase Sapphire")
     
     if uploaded_file is not None:
-        # Preview
         st.subheader("Preview")
         preview_df = pd.read_csv(uploaded_file)
         st.dataframe(preview_df.head(10), use_container_width=True)
         
-        # Reset file position
         uploaded_file.seek(0)
         
         if st.button("Process & Import", type="primary", use_container_width=True):
@@ -269,17 +243,14 @@ def render_upload_page():
 
 
 def render_holdings_page():
-    """Render the holdings management page."""
     st.title("💼 Investment Holdings")
     
     user_id = get_current_user_id()
     
-    # Fetch holdings
     with st.spinner("Fetching prices..."):
         holdings = get_holdings(user_id)
         enriched_holdings = calculate_holdings_value(holdings) if holdings else []
     
-    # Add new holding form
     with st.expander("➕ Add New Holding", expanded=not holdings):
         with st.form("add_holding_form"):
             col1, col2, col3 = st.columns(3)
@@ -311,9 +282,7 @@ def render_holdings_page():
                     st.success(f"Added {quantity} shares of {ticker}")
                     st.rerun()
     
-    # Display holdings
     if enriched_holdings:
-        # Summary metrics
         total_value = sum(h.get('current_value', 0) or 0 for h in enriched_holdings)
         total_gain = sum(h.get('gain', 0) or 0 for h in enriched_holdings)
         
@@ -323,7 +292,6 @@ def render_holdings_page():
         
         st.markdown("---")
         
-        # Holdings table with delete buttons
         for holding in enriched_holdings:
             with st.container():
                 col1, col2, col3, col4, col5, col6 = st.columns([2, 2, 2, 2, 2, 1])
@@ -350,7 +318,6 @@ def render_holdings_page():
 
 
 def render_add_transaction_page():
-    """Render the manual transaction entry page."""
     st.title("➕ Add Transaction")
     
     user_id = get_current_user_id()
@@ -392,7 +359,6 @@ def render_add_transaction_page():
                 st.success("Transaction added successfully!")
                 st.balloons()
     
-    # Recent transactions
     st.markdown("---")
     st.subheader("Recent Transactions")
     
