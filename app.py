@@ -1,9 +1,11 @@
 import streamlit as st
 import pandas as pd
+import requests
+from streamlit_lottie import st_lottie
 
 st.set_page_config(
-    page_title="Personal Finance HQ",
-    page_icon="🏦",
+    page_title="Pocketpal",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -15,7 +17,34 @@ from src.market_data import calculate_holdings_value, get_total_portfolio_value,
 from src.visuals import create_sankey_diagram, create_spending_by_category_chart, create_spending_trend_chart, create_holdings_chart, calculate_kpis
 
 
+# --- Assets & Config ---
+LORDICON_URLS = {
+    "dashboard": "https://cdn.lordicon.com/qhviklyi.json",  # Placeholder: Chart/Analysis
+    "upload": "https://cdn.lordicon.com/fzewnmpi.json",     # Placeholder: Cloud/Upload
+    "holdings": "https://cdn.lordicon.com/vaeagfzc.json",   # Placeholder: Wallet/Money
+    "transaction": "https://cdn.lordicon.com/xzksbhzh.json", # Placeholder: Add/Plus
+    "sidebar_logo": "https://cdn.lordicon.com/dycatgju.json" # Placeholder: Rocket/Launch
+}
+
+def load_lottieurl(url: str):
+    r = requests.get(url)
+    if r.status_code != 200:
+        return None
+    return r.json()
+
+
 def main():
+    # Inject Custom CSS for Font
+    st.markdown("""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+            
+            html, body, [class*="css"] {
+                font-family: 'Space Grotesk', sans-serif;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
     init_session_state()
     
     if not is_authenticated():
@@ -28,12 +57,17 @@ def main():
 
 def render_sidebar():
     with st.sidebar:
-        st.title("🏦 Finance HQ")
+        lottie_logo = load_lottieurl(LORDICON_URLS["sidebar_logo"])
+        if lottie_logo:
+            st_lottie(lottie_logo, height=100, key="sidebar_logo")
+        else:
+            st.title("Pocketpal")
+            
         st.markdown("---")
         
         page = st.radio(
             "Navigate",
-            ["📊 Dashboard", "📤 Upload CSV", "💼 Holdings", "➕ Add Transaction"],
+            ["Dashboard", "Upload CSV", "Holdings", "Add Transaction"],
             label_visibility="collapsed"
         )
         st.session_state["current_page"] = page
@@ -50,20 +84,26 @@ def render_sidebar():
 
 
 def render_main_content():
-    page = st.session_state.get("current_page", "📊 Dashboard")
+    page = st.session_state.get("current_page", "Dashboard")
     
-    if page == "📊 Dashboard":
+    if page == "Dashboard":
         render_dashboard()
-    elif page == "📤 Upload CSV":
+    elif page == "Upload CSV":
         render_upload_page()
-    elif page == "💼 Holdings":
+    elif page == "Holdings":
         render_holdings_page()
-    elif page == "➕ Add Transaction":
+    elif page == "Add Transaction":
         render_add_transaction_page()
 
 
 def render_dashboard():
-    st.title("📊 Dashboard")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        lottie_dash = load_lottieurl(LORDICON_URLS["dashboard"])
+        if lottie_dash:
+            st_lottie(lottie_dash, height=60, key="dash_header")
+    with col2:
+        st.title("Dashboard")
     
     user_id = get_current_user_id()
     
@@ -174,7 +214,13 @@ def render_dashboard():
 
 
 def render_upload_page():
-    st.title("📤 Upload Bank CSV")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        lottie_upload = load_lottieurl(LORDICON_URLS["upload"])
+        if lottie_upload:
+            st_lottie(lottie_upload, height=60, key="upload_header")
+    with col2:
+        st.title("Upload Bank CSV")
     
     user_id = get_current_user_id()
     
@@ -243,7 +289,13 @@ def render_upload_page():
 
 
 def render_holdings_page():
-    st.title("💼 Investment Holdings")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        lottie_hold = load_lottieurl(LORDICON_URLS["holdings"])
+        if lottie_hold:
+            st_lottie(lottie_hold, height=60, key="holdings_header")
+    with col2:
+        st.title("Investment Holdings")
     
     user_id = get_current_user_id()
     
@@ -318,7 +370,13 @@ def render_holdings_page():
 
 
 def render_add_transaction_page():
-    st.title("➕ Add Transaction")
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        lottie_txn = load_lottieurl(LORDICON_URLS["transaction"])
+        if lottie_txn:
+            st_lottie(lottie_txn, height=60, key="txn_header")
+    with col2:
+        st.title("Add Transaction")
     
     user_id = get_current_user_id()
     

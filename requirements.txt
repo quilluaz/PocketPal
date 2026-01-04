@@ -3,3 +3,5 @@ supabase>=2.0.0
 pandas>=2.0.0
 plotly>=5.18.0
 yfinance>=0.2.33
+streamlit-lottie>=0.0.5
+requests
