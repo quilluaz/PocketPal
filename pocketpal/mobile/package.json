@@ -1,0 +1,30 @@
+{
+  "name": "pocketpal-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "latest",
+    "expo": "latest",
+    "expo-sqlite": "latest",
+    "expo-status-bar": "latest",
+    "lucide-react-native": "latest",
+    "react": "latest",
+    "react-native": "latest",
+    "react-native-reanimated": "latest",
+    "react-native-safe-area-context": "latest",
+    "react-native-svg": "latest",
+    "react-native-worklets": "^0.9.2"
+  },
+  "devDependencies": {
+    "@types/react": "latest",
+    "typescript": "latest"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "PocketPal",
+    "slug": "pocketpal",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#07100d"
+      }
+    },
+    "extra": {
+      "apiUrl": "http://localhost:8000"
+    }
+  }
+}
+
