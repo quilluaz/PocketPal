@@ -2,13 +2,20 @@
 
 ## Overview
 
-PocketPal is an offline-first, multi-currency personal finance ledger and automation platform. It combines a React Native mobile app, a FastAPI backend, Supabase Auth, Supabase PostgreSQL, append-only accounting records, sandbox bank webhook ingestion, deterministic balance reconciliation, and frozen FX valuation.
+PocketPal is an offline-first, multi-currency personal finance ledger and
+automation platform. It combines a React Native mobile app, a FastAPI backend,
+Supabase Auth, Supabase PostgreSQL, append-only accounting records, sandbox
+bank webhook ingestion, deterministic balance reconciliation, and frozen FX
+valuation.
 
 This is designed as a serious personal finance engineering project rather than a basic CRUD expense tracker.
 
 ## Why This Project Exists
 
-Personal finance data gets hard once the app has to work offline, accept at-least-once mobile sync, ingest external bank snapshots, preserve audit history, and keep analytics clean. PocketPal demonstrates those real-world constraints directly:
+Personal finance data gets hard once the app has to work offline, accept
+at-least-once mobile sync, ingest external bank snapshots, preserve audit
+history, and keep analytics clean. PocketPal demonstrates those real-world
+constraints directly:
 
 - Local mobile writes are queued with stable UUIDs and client revisions.
 - Backend sync is idempotent and revision-aware.
@@ -86,6 +93,13 @@ Dashboard Analytics
 - Testing: pytest, pytest-asyncio
 - Deployment path: containerized FastAPI plus Supabase-managed Postgres/Auth
 
+## Repository Map
+
+- `backend/`: FastAPI API, domain services, webhook processors, and backend tests.
+- `mobile/`: Expo / React Native mobile app with SQLite offline sync queue.
+- `supabase/`: Raw SQL migrations, local Supabase config, and seed data.
+- `legacy_streamlit/`: Preserved Streamlit prototype from the original app.
+
 ## Ledger Philosophy
 
 PocketPal treats money movement as an accounting ledger.
@@ -94,9 +108,13 @@ PocketPal treats money movement as an accounting ledger.
 - `cleared`: finalized entries from a trusted source or manual-only cash account.
 - `adjusted`: system reconciliation rows that make the ledger match a bank snapshot.
 
-Manual pending entries may be updated if the incoming `client_revision` is newer. Cleared, adjusted, system-generated, reconciliation, and opening-balance rows are not destructively edited. Corrections after finalization happen through reversals or compensating entries.
+Manual pending entries may be updated if the incoming `client_revision` is
+newer. Cleared, adjusted, system-generated, reconciliation, and opening-balance
+rows are not destructively edited. Corrections after finalization happen
+through reversals or compensating entries.
 
-Day Zero onboarding uses an opening-balance transaction so a newly linked account does not begin life with an ugly reconciliation adjustment.
+Day Zero onboarding uses an opening-balance transaction so a newly linked
+account does not begin life with an ugly reconciliation adjustment.
 
 ## Money Model
 
@@ -109,11 +127,14 @@ PocketPal bans IEEE 754 floating-point math for money.
 - `amount_minor_base`: frozen reporting value in base-currency minor units.
 - `exchange_rate_to_base`: rate used to freeze the base value.
 
-Display uses `amount_minor / (10 ^ currency.exponent)`. JPY uses exponent `0`; KWD uses exponent `3`. The backend uses Python `Decimal` for conversion and stores money as `BIGINT`.
+Display uses `amount_minor / (10 ^ currency.exponent)`. JPY uses exponent `0`;
+KWD uses exponent `3`. The backend uses Python `Decimal` for conversion and
+stores money as `BIGINT`.
 
 ## Reconciliation Model
 
-Bank current balance is the reconciliation ground truth. PocketPal stores immutable `account_balance_snapshots` from the provider and compares:
+Bank current balance is the reconciliation ground truth. PocketPal stores
+immutable `account_balance_snapshots` from the provider and compares:
 
 ```text
 bank current balance at snapshot.as_of
@@ -121,9 +142,14 @@ vs.
 local ledger sum where ledger_cutoff_at <= snapshot.as_of
 ```
 
-Reconciliation is performed in the account's native currency first. `available_balance` is stored for display and context, but it is not used as the reconciliation target.
+Reconciliation is performed in the account's native currency first.
+`available_balance` is stored for display and context, but it is not used as the
+reconciliation target.
 
-If the snapshot and ledger differ, PocketPal creates one system reconciliation transaction plus one `reconciliation_adjustments` row for that account/snapshot pair. Later corrections reverse or supersede adjustments; historical rows are not deleted.
+If the snapshot and ledger differ, PocketPal creates one system reconciliation
+transaction plus one `reconciliation_adjustments` row for that account/snapshot
+pair. Later corrections reverse or supersede adjustments; historical rows are
+not deleted.
 
 ## Offline Sync Model
 
@@ -135,7 +161,8 @@ The mobile app writes new manual transactions to SQLite first. Each queued row h
 - native integer `amount_minor`
 - IANA timezone-aware timestamp data
 
-Sync is at-least-once. The backend generates the idempotency key `manual:{local_transaction_uuid}` and returns per-record statuses:
+Sync is at-least-once. The backend generates the idempotency key
+`manual:{local_transaction_uuid}` and returns per-record statuses:
 
 - `inserted`
 - `updated`
@@ -143,11 +170,15 @@ Sync is at-least-once. The backend generates the idempotency key `manual:{local_
 - `stale_ignored`
 - `failed`
 
-Revision `2` can replace revision `1` while the server row is still pending. Revision `1` cannot overwrite revision `2`. The server uses `ledger_status`; `local_unsynced` exists only in the mobile SQLite queue.
+Revision `2` can replace revision `1` while the server row is still pending.
+Revision `1` cannot overwrite revision `2`. The server uses `ledger_status`;
+`local_unsynced` exists only in the mobile SQLite queue.
 
 ## Security Model
 
-PocketPal validates Supabase JWTs in the FastAPI dependency `get_current_user()`. It extracts `sub` as the authenticated user ID and does not trust `user_id` from request bodies.
+PocketPal validates Supabase JWTs in the FastAPI dependency
+`get_current_user()`. It extracts `sub` as the authenticated user ID and does
+not trust `user_id` from request bodies.
 
 Supabase RLS is enabled on user-owned tables:
 
@@ -159,7 +190,11 @@ Supabase RLS is enabled on user-owned tables:
 - `account_balance_snapshots`
 - `reconciliation_adjustments`
 
-Reference tables such as `currencies` and `exchange_rates` are readable by authenticated users. Provider webhooks are verified through provider-specific verifier classes. The mock bank uses HMAC-SHA256. Plaid is intentionally represented by a separate verifier placeholder and is documented as a TODO rather than falsely treated as mock HMAC.
+Reference tables such as `currencies` and `exchange_rates` are readable by
+authenticated users. Provider webhooks are verified through provider-specific
+verifier classes. The mock bank uses HMAC-SHA256. Plaid is intentionally
+represented by a separate verifier placeholder and is documented as a TODO
+rather than falsely treated as mock HMAC.
 
 Secrets live in environment variables. No production secrets belong in the repository.
 
@@ -244,10 +279,14 @@ npx expo start --android
 ## API Overview
 
 - `GET /health`: returns service health.
-- `GET /dashboard`: returns projected balance, settled balance, pending manual total, account cards, KPIs, and reconnect actions.
+- `GET /dashboard`: returns projected balance, settled balance, pending manual
+  total, account cards, KPIs, and reconnect actions.
 - `POST /sync`: accepts offline manual queue entries with idempotent, revision-safe upsert behavior.
-- `POST /accounts/mock-connect`: creates a sandbox account, stores the Day Zero snapshot, ingests historical transactions, and creates the opening balance.
-- `POST /webhooks/bank/{provider}`: verifies provider signatures, persists events, normalizes mock-bank transactions, stores snapshots, and runs reconciliation.
+- `POST /accounts/mock-connect`: creates a sandbox account, stores the Day Zero
+  snapshot, ingests historical transactions, and creates the opening balance.
+- `POST /webhooks/bank/{provider}`: verifies provider signatures, persists
+  events, normalizes mock-bank transactions, stores snapshots, and runs
+  reconciliation.
 
 ## Testing
 
@@ -290,7 +329,10 @@ pytest
 - Export/reporting
 - Stronger audit review workflow
 
+## Legacy Prototype
+
+The previous Streamlit prototype has been preserved under `legacy_streamlit/`.
+
 ## License
 
 MIT
-

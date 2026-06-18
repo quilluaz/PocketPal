@@ -118,9 +118,19 @@ export default function App() {
       ) : null}
       <View style={styles.body}>{content}</View>
       <View style={styles.nav}>
-        <TabButton active={screen === "dashboard"} icon="home" label="Home" onPress={() => setScreen("dashboard")} />
+        <TabButton
+          active={screen === "dashboard"}
+          icon="home"
+          label="Home"
+          onPress={() => setScreen("dashboard")}
+        />
         <TabButton active={screen === "add"} icon="add" label="Add" onPress={() => setScreen("add")} />
-        <TabButton active={screen === "queue"} icon="queue" label={`${queue.length}`} onPress={() => setScreen("queue")} />
+        <TabButton
+          active={screen === "queue"}
+          icon="queue"
+          label={`${queue.length}`}
+          onPress={() => setScreen("queue")}
+        />
         <TabButton
           active={screen === "reconnect"}
           attention={hasReconnect}
@@ -149,7 +159,14 @@ type TabProps = {
 
 function TabButton({ active, attention, icon, label, onPress }: TabProps) {
   const color = active ? "#06110d" : attention ? "#f5b84b" : "#b9cec4";
-  const Icon = icon === "home" ? Home : icon === "add" ? PlusCircle : icon === "queue" ? Clock3 : icon === "reconnect" ? RefreshCw : Settings;
+  const iconMap = {
+    add: PlusCircle,
+    home: Home,
+    queue: Clock3,
+    reconnect: RefreshCw,
+    settings: Settings
+  };
+  const Icon = iconMap[icon];
   return (
     <Pressable onPress={onPress} style={[styles.tab, active && styles.tabActive]}>
       <Icon color={color} size={19} strokeWidth={2.7} />
@@ -227,4 +244,3 @@ const styles = StyleSheet.create({
     color: "#f5b84b"
   }
 });
-
