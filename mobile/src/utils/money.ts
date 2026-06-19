@@ -1,4 +1,4 @@
-import { CurrencyMeta } from "../types/money";
+import type { CurrencyMeta } from "../types/money";
 
 export const fallbackCurrencies: CurrencyMeta[] = [
   { code: "PHP", exponent: 2, name: "Philippine Peso", symbol: "PHP" },
@@ -7,8 +7,44 @@ export const fallbackCurrencies: CurrencyMeta[] = [
   { code: "KWD", exponent: 3, name: "Kuwaiti Dinar", symbol: "KD" }
 ];
 
-export function currencyExponent(currency: string, currencies: CurrencyMeta[] = fallbackCurrencies): number {
-  return currencies.find((item) => item.code === currency)?.exponent ?? 2;
+export function currencyMeta(
+  currency: string,
+  currencies: CurrencyMeta[] = fallbackCurrencies
+): CurrencyMeta {
+  const normalized = currency.toUpperCase();
+  return (
+    currencies.find((item) => item.code === normalized) ?? {
+      code: normalized,
+      exponent: 2,
+      name: normalized,
+      symbol: normalized
+    }
+  );
+}
+
+export function currencyExponent(
+  currency: string,
+  currencies: CurrencyMeta[] = fallbackCurrencies
+): number {
+  return currencyMeta(currency, currencies).exponent;
+}
+
+function minorScale(exponent: number): bigint {
+  return 10n ** BigInt(exponent);
+}
+
+function localizedInteger(value: bigint): string {
+  return value.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function displaySymbol(currency: string, symbol?: string | null): string {
+  if (currency === "PHP") {
+    return "\u20b1";
+  }
+  if (currency === "JPY") {
+    return "\u00a5";
+  }
+  return symbol || currency;
 }
 
 export function majorToMinor(amountMajor: string, exponent: number): number {
@@ -16,12 +52,14 @@ export function majorToMinor(amountMajor: string, exponent: number): number {
   if (!normalized) {
     return 0;
   }
-  const [wholeRaw, fractionRaw = ""] = normalized.split(".");
-  const sign = wholeRaw.startsWith("-") ? -1 : 1;
-  const whole = Math.abs(Number.parseInt(wholeRaw || "0", 10));
-  const fraction = fractionRaw.padEnd(exponent, "0").slice(0, exponent);
-  const fractionValue = exponent === 0 ? 0 : Number.parseInt(fraction || "0", 10);
-  return sign * (whole * 10 ** exponent + fractionValue);
+  const sign = normalized.startsWith("-") ? -1n : 1n;
+  const unsigned = normalized.replace(/^[+-]/, "");
+  const [wholeRaw = "0", fractionRaw = ""] = unsigned.split(".");
+  const wholeDigits = wholeRaw.replace(/\D/g, "") || "0";
+  const fractionDigits = fractionRaw.replace(/\D/g, "").padEnd(exponent, "0").slice(0, exponent);
+  const wholeMinor = BigInt(wholeDigits) * minorScale(exponent);
+  const fractionMinor = exponent === 0 ? 0n : BigInt(fractionDigits || "0");
+  return Number(sign * (wholeMinor + fractionMinor));
 }
 
 export function formatMoney(
@@ -29,13 +67,18 @@ export function formatMoney(
   currency: string,
   currencies: CurrencyMeta[] = fallbackCurrencies
 ): string {
-  const exponent = currencyExponent(currency, currencies);
-  const amountMajor = amountMinor / 10 ** exponent;
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    minimumFractionDigits: exponent,
-    maximumFractionDigits: exponent
-  }).format(amountMajor);
-}
+  const meta = currencyMeta(currency, currencies);
+  const exponent = meta.exponent;
+  const scale = minorScale(exponent);
+  const minor = BigInt(amountMinor);
+  const sign = minor < 0n ? "-" : "";
+  const absoluteMinor = minor < 0n ? -minor : minor;
+  const whole = absoluteMinor / scale;
+  const fraction = absoluteMinor % scale;
+  const fractionText =
+    exponent === 0 ? "" : `.${fraction.toString().padStart(exponent, "0")}`;
+  const symbol = displaySymbol(meta.code, meta.symbol);
+  const spacer = symbol.length > 1 ? " " : "";
 
+  return `${sign}${symbol}${spacer}${localizedInteger(whole)}${fractionText}`;
+}

@@ -223,7 +223,7 @@ cd backend
 python -m venv .venv
 . .venv/Scripts/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 8. Run Expo:
@@ -262,8 +262,8 @@ cd backend
 python -m venv .venv
 . .venv/Scripts/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
-pytest
+python -m uvicorn app.main:app --reload
+python -m pytest -q
 ```
 
 ## Mobile Commands
@@ -307,7 +307,7 @@ Run:
 
 ```bash
 cd backend
-pytest
+python -m pytest -q
 ```
 
 ## Known V1 Limitations

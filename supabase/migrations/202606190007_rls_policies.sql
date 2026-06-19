@@ -146,26 +146,10 @@ TO authenticated
 USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can insert own transactions" ON public.transactions;
-CREATE POLICY "Users can insert own transactions"
-ON public.transactions
-FOR INSERT
-TO authenticated
-WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can update own transactions" ON public.transactions;
-CREATE POLICY "Users can update own transactions"
-ON public.transactions
-FOR UPDATE
-TO authenticated
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can delete own transactions" ON public.transactions;
-CREATE POLICY "Users can delete own transactions"
-ON public.transactions
-FOR DELETE
-TO authenticated
-USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can select own snapshots" ON public.account_balance_snapshots;
 CREATE POLICY "Users can select own snapshots"
@@ -175,26 +159,10 @@ TO authenticated
 USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can insert own snapshots" ON public.account_balance_snapshots;
-CREATE POLICY "Users can insert own snapshots"
-ON public.account_balance_snapshots
-FOR INSERT
-TO authenticated
-WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can update own snapshots" ON public.account_balance_snapshots;
-CREATE POLICY "Users can update own snapshots"
-ON public.account_balance_snapshots
-FOR UPDATE
-TO authenticated
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can delete own snapshots" ON public.account_balance_snapshots;
-CREATE POLICY "Users can delete own snapshots"
-ON public.account_balance_snapshots
-FOR DELETE
-TO authenticated
-USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can select own reconciliation adjustments" ON public.reconciliation_adjustments;
 CREATE POLICY "Users can select own reconciliation adjustments"
@@ -204,24 +172,7 @@ TO authenticated
 USING (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can insert own reconciliation adjustments" ON public.reconciliation_adjustments;
-CREATE POLICY "Users can insert own reconciliation adjustments"
-ON public.reconciliation_adjustments
-FOR INSERT
-TO authenticated
-WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can update own reconciliation adjustments" ON public.reconciliation_adjustments;
-CREATE POLICY "Users can update own reconciliation adjustments"
-ON public.reconciliation_adjustments
-FOR UPDATE
-TO authenticated
-USING (auth.uid() = user_id)
-WITH CHECK (auth.uid() = user_id);
 
 DROP POLICY IF EXISTS "Users can delete own reconciliation adjustments" ON public.reconciliation_adjustments;
-CREATE POLICY "Users can delete own reconciliation adjustments"
-ON public.reconciliation_adjustments
-FOR DELETE
-TO authenticated
-USING (auth.uid() = user_id);
-

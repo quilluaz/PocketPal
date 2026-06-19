@@ -36,25 +36,35 @@ class InMemorySyncStore:
             fx_valuation_status="not_required",
         )
 
-    async def get_manual_transaction(self, user_id, idempotency_key):
-        return self.transactions.get(idempotency_key)
+    async def upsert_manual_transaction(self, payload):
+        existing = self.transactions.get(payload["idempotency_key"])
+        if existing is None:
+            transaction_id = uuid4()
+            self.transactions[payload["idempotency_key"]] = {
+                "id": transaction_id,
+                "amount_minor": payload["amount_minor"],
+                "client_revision": payload["client_revision"],
+                "ledger_status": payload["ledger_status"],
+                "match_state": payload["match_state"],
+            }
+            return {"id": transaction_id, "status": "inserted", "error": None}
 
-    async def insert_manual_transaction(self, payload):
-        transaction_id = uuid4()
-        self.transactions[payload["idempotency_key"]] = {
-            "id": transaction_id,
-            "amount_minor": payload["amount_minor"],
-            "client_revision": payload["client_revision"],
-            "ledger_status": payload["ledger_status"],
-            "match_state": payload["match_state"],
-        }
-        return transaction_id
+        if payload["client_revision"] == existing["client_revision"]:
+            return {"id": existing["id"], "status": "already_synced", "error": None}
+        if payload["client_revision"] < existing["client_revision"]:
+            return {"id": existing["id"], "status": "stale_ignored", "error": None}
+        if existing["ledger_status"] in {"cleared", "adjusted"} or existing[
+            "match_state"
+        ] not in {"not_required", "match_pending"}:
+            return {
+                "id": existing["id"],
+                "status": "failed",
+                "error": "transaction_finalized",
+            }
 
-    async def update_manual_transaction(self, transaction_id, payload):
-        record = self.transactions[payload["idempotency_key"]]
-        record["amount_minor"] = payload["amount_minor"]
-        record["client_revision"] = payload["client_revision"]
-        return transaction_id
+        existing["amount_minor"] = payload["amount_minor"]
+        existing["client_revision"] = payload["client_revision"]
+        return {"id": existing["id"], "status": "updated", "error": None}
 
 
 def make_request(account_id, local_id, amount_minor, revision):
@@ -107,4 +117,3 @@ async def test_stale_overwrite_is_ignored():
     key = manual_idempotency_key(local_id)
     assert stale.results[0].status == "stale_ignored"
     assert store.transactions[key]["amount_minor"] == -5000
-

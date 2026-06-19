@@ -5,9 +5,6 @@ from uuid import UUID
 from app.models.sync import ManualSyncEntry, ManualSyncRequest, ManualSyncResponse, ManualSyncResult
 from app.services.fx import FXService, PostgresFXStore
 
-FINAL_STATUSES = {"cleared", "adjusted"}
-MUTABLE_MATCH_STATES = {"not_required", "match_pending"}
-
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -61,27 +58,10 @@ class PostgresSyncStore:
             timezone_name=timezone_name,
         )
 
-    async def get_manual_transaction(
-        self,
-        user_id: UUID,
-        idempotency_key: str,
-    ) -> dict[str, Any] | None:
+    async def upsert_manual_transaction(self, payload: dict[str, Any]) -> dict[str, Any]:
         row = await self.db.fetchrow(
             """
-            SELECT id, client_revision, ledger_status, match_state
-            FROM public.transactions
-            WHERE user_id = $1
-              AND source = 'manual'
-              AND idempotency_key = $2
-            """,
-            user_id,
-            idempotency_key,
-        )
-        return dict(row) if row else None
-
-    async def insert_manual_transaction(self, payload: dict[str, Any]) -> UUID:
-        row = await self.db.fetchrow(
-            """
+            WITH upserted AS (
             INSERT INTO public.transactions (
               user_id, account_id, currency, amount_minor,
               base_currency, amount_minor_base, exchange_rate_to_base,
@@ -102,7 +82,62 @@ class PostgresSyncStore:
               now(), $22, $23,
               TRUE, $24
             )
-            RETURNING id
+            ON CONFLICT (user_id, source, idempotency_key)
+            WHERE idempotency_key IS NOT NULL
+            DO UPDATE
+            SET amount_minor = EXCLUDED.amount_minor,
+                base_currency = EXCLUDED.base_currency,
+                amount_minor_base = EXCLUDED.amount_minor_base,
+                exchange_rate_to_base = EXCLUDED.exchange_rate_to_base,
+                exchange_rate_source = EXCLUDED.exchange_rate_source,
+                exchange_rate_as_of = EXCLUDED.exchange_rate_as_of,
+                fx_valuation_status = EXCLUDED.fx_valuation_status,
+                ledger_cutoff_at = EXCLUDED.ledger_cutoff_at,
+                client_revision = EXCLUDED.client_revision,
+                category = EXCLUDED.category,
+                vendor = EXCLUDED.vendor,
+                description = EXCLUDED.description,
+                is_backfilled = EXCLUDED.is_backfilled,
+                requires_reconciliation_review = EXCLUDED.requires_reconciliation_review,
+                affects_analytics = EXCLUDED.affects_analytics,
+                updated_at = now()
+            WHERE public.transactions.ledger_status = 'pending'
+              AND public.transactions.match_state IN ('not_required', 'match_pending')
+              AND EXCLUDED.client_revision > public.transactions.client_revision
+            RETURNING
+              id,
+              CASE WHEN xmax = 0 THEN 'inserted' ELSE 'updated' END AS status,
+              NULL::TEXT AS error
+            ),
+            existing AS (
+              SELECT id, client_revision, ledger_status, match_state
+              FROM public.transactions
+              WHERE user_id = $1
+                AND source = 'manual'
+                AND idempotency_key = $11
+            )
+            SELECT id, status, error
+            FROM upserted
+            UNION ALL
+            SELECT
+              id,
+              CASE
+                WHEN client_revision = $14 THEN 'already_synced'
+                WHEN client_revision > $14 THEN 'stale_ignored'
+                WHEN ledger_status IN ('cleared', 'adjusted')
+                  OR match_state NOT IN ('not_required', 'match_pending')
+                  THEN 'failed'
+                ELSE 'failed'
+              END AS status,
+              CASE
+                WHEN ledger_status IN ('cleared', 'adjusted')
+                  OR match_state NOT IN ('not_required', 'match_pending')
+                  THEN 'transaction_finalized'
+                ELSE 'sync_conflict_not_applied'
+              END AS error
+            FROM existing
+            WHERE NOT EXISTS (SELECT 1 FROM upserted)
+            LIMIT 1
             """,
             payload["user_id"],
             payload["account_id"],
@@ -130,53 +165,7 @@ class PostgresSyncStore:
             payload["affects_analytics"],
         )
         assert row is not None
-        return row["id"]
-
-    async def update_manual_transaction(self, transaction_id: UUID, payload: dict[str, Any]) -> UUID:
-        row = await self.db.fetchrow(
-            """
-            UPDATE public.transactions
-            SET amount_minor = $2,
-                base_currency = $3,
-                amount_minor_base = $4,
-                exchange_rate_to_base = $5,
-                exchange_rate_source = $6,
-                exchange_rate_as_of = $7,
-                fx_valuation_status = $8,
-                ledger_cutoff_at = $9,
-                client_revision = $10,
-                category = $11,
-                vendor = $12,
-                description = $13,
-                is_backfilled = $14,
-                requires_reconciliation_review = $15,
-                affects_analytics = $16,
-                updated_at = now()
-            WHERE id = $1
-              AND source = 'manual'
-              AND ledger_status = 'pending'
-              AND match_state IN ('not_required', 'match_pending')
-            RETURNING id
-            """,
-            transaction_id,
-            payload["amount_minor"],
-            payload["base_currency"],
-            payload["amount_minor_base"],
-            payload["exchange_rate_to_base"],
-            payload["exchange_rate_source"],
-            payload["exchange_rate_as_of"],
-            payload["fx_valuation_status"],
-            payload["ledger_cutoff_at"],
-            payload["client_revision"],
-            payload["category"],
-            payload["vendor"],
-            payload["description"],
-            payload["is_backfilled"],
-            payload["requires_reconciliation_review"],
-            payload["affects_analytics"],
-        )
-        assert row is not None
-        return row["id"]
+        return dict(row)
 
 
 class SyncService:
@@ -257,43 +246,13 @@ class SyncService:
                 "affects_analytics": affects_analytics,
             }
 
-            existing = await self.store.get_manual_transaction(user_id, idempotency_key)
-            if existing is None:
-                transaction_id = await self.store.insert_manual_transaction(payload)
-                return ManualSyncResult(
-                    local_transaction_uuid=entry.local_transaction_uuid,
-                    server_transaction_id=transaction_id,
-                    status="inserted",
-                )
-
-            if entry.client_revision == existing["client_revision"]:
-                return ManualSyncResult(
-                    local_transaction_uuid=entry.local_transaction_uuid,
-                    server_transaction_id=existing["id"],
-                    status="already_synced",
-                )
-            if entry.client_revision < existing["client_revision"]:
-                return ManualSyncResult(
-                    local_transaction_uuid=entry.local_transaction_uuid,
-                    server_transaction_id=existing["id"],
-                    status="stale_ignored",
-                )
-            if (
-                existing["ledger_status"] in FINAL_STATUSES
-                or existing["match_state"] not in MUTABLE_MATCH_STATES
-            ):
-                return ManualSyncResult(
-                    local_transaction_uuid=entry.local_transaction_uuid,
-                    server_transaction_id=existing["id"],
-                    status="failed",
-                    error="transaction_finalized",
-                )
-
-            transaction_id = await self.store.update_manual_transaction(existing["id"], payload)
+            result = await self.store.upsert_manual_transaction(payload)
+            error = result["error"] if result["status"] == "failed" else None
             return ManualSyncResult(
                 local_transaction_uuid=entry.local_transaction_uuid,
-                server_transaction_id=transaction_id,
-                status="updated",
+                server_transaction_id=result["id"],
+                status=result["status"],
+                error=error,
             )
         except Exception as exc:  # pragma: no cover - defensive API boundary
             return ManualSyncResult(
@@ -301,4 +260,3 @@ class SyncService:
                 status="failed",
                 error=str(exc),
             )
-
